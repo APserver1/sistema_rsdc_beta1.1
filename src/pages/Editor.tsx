@@ -47,6 +47,7 @@ const Editor: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [customDate, setCustomDate] = useState('');
+  const [topMargin, setTopMargin] = useState(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchOficio = useCallback(async () => {
@@ -63,6 +64,7 @@ const Editor: React.FC = () => {
       setOficio(data);
       setContent(data.contenido_editor || '');
       setCustomDate(data.fecha_creacion.split('T')[0]);
+      setTopMargin(data.margen_superior || 0);
     } catch (err) {
       console.error('Error fetching oficio:', err);
       navigate('/oficios');
@@ -75,7 +77,7 @@ const Editor: React.FC = () => {
     fetchOficio();
   }, [fetchOficio]);
 
-  const saveContent = useCallback(async (newContent: string) => {
+  const saveContent = useCallback(async (newContent: string, margin?: number) => {
     if (!id) return;
     setSaving(true);
     try {
@@ -83,7 +85,8 @@ const Editor: React.FC = () => {
         .from('rsdc_oficios')
         .update({ 
           contenido_editor: newContent,
-          fecha_creacion: customDate
+          fecha_creacion: customDate,
+          margen_superior: margin !== undefined ? margin : topMargin
         })
         .eq('id', id);
 
@@ -93,7 +96,7 @@ const Editor: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  }, [id, customDate]);
+  }, [id, customDate, topMargin]);
 
   const handleContentChange = (value: string) => {
     setContent(value);
@@ -108,6 +111,14 @@ const Editor: React.FC = () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveContent(content);
+    }, 1000);
+  };
+
+  const handleMarginChange = (newMargin: number) => {
+    setTopMargin(newMargin);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(content, newMargin);
     }, 1000);
   };
 
@@ -204,7 +215,10 @@ const Editor: React.FC = () => {
               {/* Content Wrapper to sit above background */}
               <div className="relative z-10">
                 {/* Oficio Header */}
-                <div className="flex justify-between mb-12 text-sm font-bold pb-4">
+                <div 
+                  className="flex justify-between mb-12 text-sm font-bold pb-4"
+                  style={{ marginTop: `${topMargin * 24}px` }}
+                >
                   <span>Oficio No. {oficio?.numero_oficio}/ADMON/RSDC No.5</span>
                   <span>{formatDateString(customDate)}</span>
                 </div>
@@ -253,6 +267,21 @@ const Editor: React.FC = () => {
                 <div className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white/40 text-sm font-mono">
                   {oficio?.anio}
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Margen Superior</label>
+                  <span className="text-[10px] font-bold text-primary">{topMargin} renglones</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="20" 
+                  value={topMargin}
+                  onChange={(e) => handleMarginChange(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
+                />
               </div>
             </div>
           </div>
