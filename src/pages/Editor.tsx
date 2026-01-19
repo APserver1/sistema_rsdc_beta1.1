@@ -2,8 +2,16 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { ChevronLeft, Save, Loader2, Calendar, Type, FileText, Download, Printer, Share2 } from 'lucide-react';
+import { ChevronLeft, Save, Loader2, Calendar, Type, FileText, Download, Printer, Share2, Users, Building2, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+
+interface DestinatarioHistory {
+  destinatario_tipo: string;
+  destinatario_titulo: string;
+  destinatario_nombre: string;
+  destinatario_cargo: string;
+  destinatario_institucion: string;
+}
 
 // Custom toolbar component
 const CustomToolbar = () => (
@@ -48,7 +56,42 @@ const Editor: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [customDate, setCustomDate] = useState('');
   const [topMargin, setTopMargin] = useState(0);
+  const [destinatario, setDestinatario] = useState<DestinatarioHistory>({
+    destinatario_tipo: 'persona',
+    destinatario_titulo: 'LIC.',
+    destinatario_nombre: '',
+    destinatario_cargo: '',
+    destinatario_institucion: ''
+  });
+  const [history, setHistory] = useState<DestinatarioHistory[]>([]);
+  const [showHistory, setShowHistory] = useState<string | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchHistory = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('rsdc_oficios')
+        .select('destinatario_tipo, destinatario_titulo, destinatario_nombre, destinatario_cargo, destinatario_institucion')
+        .not('destinatario_nombre', 'eq', '')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Filter unique history entries
+      const unique = data.reduce((acc: DestinatarioHistory[], curr) => {
+        const exists = acc.find(h => 
+          h.destinatario_nombre.toLowerCase() === curr.destinatario_nombre.toLowerCase() &&
+          h.destinatario_tipo === curr.destinatario_tipo
+        );
+        if (!exists) acc.push(curr);
+        return acc;
+      }, []);
+
+      setHistory(unique);
+    } catch (err) {
+      console.error('Error fetching history:', err);
+    }
+  };
 
   const fetchOficio = useCallback(async () => {
     if (!id) return;
@@ -65,6 +108,14 @@ const Editor: React.FC = () => {
       setContent(data.contenido_editor || '');
       setCustomDate(data.fecha_creacion.split('T')[0]);
       setTopMargin(data.margen_superior || 0);
+      setDestinatario({
+        destinatario_tipo: data.destinatario_tipo || 'persona',
+        destinatario_titulo: data.destinatario_titulo || (data.destinatario_tipo === 'empresa' ? 'SEÑORES' : 'LIC.'),
+        destinatario_nombre: data.destinatario_nombre || '',
+        destinatario_cargo: data.destinatario_cargo || '',
+        destinatario_institucion: data.destinatario_institucion || ''
+      });
+      fetchHistory();
     } catch (err) {
       console.error('Error fetching oficio:', err);
       navigate('/oficios');
@@ -77,16 +128,29 @@ const Editor: React.FC = () => {
     fetchOficio();
   }, [fetchOficio]);
 
-  const saveContent = useCallback(async (newContent: string, margin?: number) => {
+  // Click outside listener for history dropdown
+  useEffect(() => {
+    const handleClickOutside = () => setShowHistory(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  const saveContent = useCallback(async (newContent: string, margin?: number, dest?: DestinatarioHistory) => {
     if (!id) return;
     setSaving(true);
+    const d = dest || destinatario;
     try {
       const { error } = await supabase
         .from('rsdc_oficios')
         .update({ 
           contenido_editor: newContent,
           fecha_creacion: customDate,
-          margen_superior: margin !== undefined ? margin : topMargin
+          margen_superior: margin !== undefined ? margin : topMargin,
+          destinatario_tipo: d.destinatario_tipo,
+          destinatario_titulo: d.destinatario_titulo,
+          destinatario_nombre: d.destinatario_nombre,
+          destinatario_cargo: d.destinatario_cargo,
+          destinatario_institucion: d.destinatario_institucion
         })
         .eq('id', id);
 
@@ -96,7 +160,7 @@ const Editor: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  }, [id, customDate, topMargin]);
+  }, [id, customDate, topMargin, destinatario]);
 
   const handleContentChange = (value: string) => {
     setContent(value);
@@ -120,6 +184,30 @@ const Editor: React.FC = () => {
     saveTimeoutRef.current = setTimeout(() => {
       saveContent(content, newMargin);
     }, 1000);
+  };
+
+  const handleDestChange = (field: keyof DestinatarioHistory, value: string) => {
+    const updated = { ...destinatario, [field]: value };
+    
+    // Auto-update title if type changes
+    if (field === 'destinatario_tipo') {
+      updated.destinatario_titulo = value === 'empresa' ? 'SEÑORES' : 'LIC.';
+    }
+
+    setDestinatario(updated);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(content, topMargin, updated);
+    }, 1500);
+  };
+
+  const selectFromHistory = (item: DestinatarioHistory) => {
+    setDestinatario(item);
+    setShowHistory(null);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(content, topMargin, item);
+    }, 500);
   };
 
   const formatDateString = (dateStr: string) => {
@@ -223,6 +311,66 @@ const Editor: React.FC = () => {
                   <span>{formatDateString(customDate)}</span>
                 </div>
 
+                {/* Destinatario Section */}
+                <div className="mb-12 space-y-0.5 relative group/dest">
+                  <div className="flex flex-col uppercase font-bold text-sm">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={destinatario.destinatario_titulo}
+                        onChange={(e) => handleDestChange('destinatario_titulo', e.target.value)}
+                        className="bg-transparent border-none p-0 focus:ring-0 w-full cursor-text hover:bg-black/5 rounded transition-colors"
+                        placeholder={destinatario.destinatario_tipo === 'empresa' ? 'SEÑORES' : 'LIC.'}
+                      />
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={destinatario.destinatario_nombre}
+                        onChange={(e) => handleDestChange('destinatario_nombre', e.target.value)}
+                        onFocus={() => setShowHistory('nombre')}
+                        className="bg-transparent border-none p-0 focus:ring-0 w-full cursor-text hover:bg-black/5 rounded transition-colors"
+                        placeholder="NOMBRE COMPLETO"
+                      />
+                      {showHistory === 'nombre' && history.length > 0 && (
+                        <div className="absolute left-0 top-full mt-1 w-full bg-white shadow-xl border border-black/10 rounded-xl z-[100] py-2 max-h-60 overflow-y-auto">
+                          {history.map((h, i) => (
+                            <button
+                              key={i}
+                              onClick={() => selectFromHistory(h)}
+                              className="w-full text-left px-4 py-2 hover:bg-black/5 flex flex-col"
+                            >
+                              <span className="font-bold text-xs">{h.destinatario_nombre}</span>
+                              <span className="text-[10px] opacity-50">{h.destinatario_cargo} - {h.destinatario_institucion}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {destinatario.destinatario_tipo === 'persona' && (
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={destinatario.destinatario_cargo}
+                          onChange={(e) => handleDestChange('destinatario_cargo', e.target.value)}
+                          className="bg-transparent border-none p-0 focus:ring-0 w-full cursor-text hover:bg-black/5 rounded transition-colors"
+                          placeholder="CARGO"
+                        />
+                      </div>
+                    )}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={destinatario.destinatario_institucion}
+                        onChange={(e) => handleDestChange('destinatario_institucion', e.target.value)}
+                        className="bg-transparent border-none p-0 focus:ring-0 w-full cursor-text hover:bg-black/5 rounded transition-colors"
+                        placeholder="INSTITUCION O LUGAR"
+                      />
+                    </div>
+                    <div className="mt-1">PRESENTE</div>
+                  </div>
+                </div>
+
                 <ReactQuill
                   theme="snow"
                   value={content}
@@ -282,6 +430,97 @@ const Editor: React.FC = () => {
                   onChange={(e) => handleMarginChange(parseInt(e.target.value))}
                   className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h4 className="text-xs font-bold text-primary uppercase tracking-[0.2em] flex items-center gap-2">
+              <Users size={14} /> Destinatario
+            </h4>
+            
+            <div className="space-y-4">
+              <div className="flex bg-white/5 p-1 rounded-xl">
+                <button
+                  onClick={() => handleDestChange('destinatario_tipo', 'persona')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${destinatario.destinatario_tipo === 'persona' ? 'bg-primary text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+                >
+                  <User size={12} /> Persona
+                </button>
+                <button
+                  onClick={() => handleDestChange('destinatario_tipo', 'empresa')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${destinatario.destinatario_tipo === 'empresa' ? 'bg-primary text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+                >
+                  <Building2 size={12} /> Empresa
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1 relative">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Nombre / Empresa</label>
+                  <input 
+                    type="text" 
+                    value={destinatario.destinatario_nombre}
+                    onChange={(e) => handleDestChange('destinatario_nombre', e.target.value)}
+                    onFocus={(e) => {
+                      e.stopPropagation();
+                      setShowHistory('panel');
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
+                    placeholder="Escriba para buscar..."
+                  />
+                  {showHistory === 'panel' && history.length > 0 && (
+                    <div className="absolute left-0 top-full mt-1 w-full bg-[#1a1f2e] shadow-2xl border border-white/10 rounded-xl z-[100] py-2 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+                      {history.map((h, i) => (
+                        <button
+                          key={i}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selectFromHistory(h);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-white/5 flex flex-col transition-colors border-b border-white/5 last:border-none"
+                        >
+                          <span className="font-bold text-xs text-white">{h.destinatario_nombre}</span>
+                          <span className="text-[10px] text-white/40">{h.destinatario_cargo} - {h.destinatario_institucion}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Título</label>
+                  <input 
+                    type="text" 
+                    value={destinatario.destinatario_titulo}
+                    onChange={(e) => handleDestChange('destinatario_titulo', e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
+                    placeholder="LIC., DRA., etc."
+                  />
+                </div>
+
+                {destinatario.destinatario_tipo === 'persona' && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Cargo</label>
+                    <input 
+                      type="text" 
+                      value={destinatario.destinatario_cargo}
+                      onChange={(e) => handleDestChange('destinatario_cargo', e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Institución / Lugar</label>
+                  <input 
+                    type="text" 
+                    value={destinatario.destinatario_institucion}
+                    onChange={(e) => handleDestChange('destinatario_institucion', e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
+                  />
+                </div>
               </div>
             </div>
           </div>
