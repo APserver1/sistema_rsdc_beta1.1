@@ -216,7 +216,7 @@ const Editor: React.FC = () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveContent(value);
-    }, 2000);\ // Auto-save after 2 seconds of inactivity
+    }, 2000); // Auto-save after 2 seconds of inactivity
   };
 
   const handleDateChange = (newDate: string) => {
