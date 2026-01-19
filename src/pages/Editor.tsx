@@ -12,6 +12,12 @@ interface DestinatarioHistory {
   destinatario_institucion: string;
 }
 
+interface FirmanteHistory {
+  firmante_nombre: string;
+  firmante_cargo: string;
+  firmante_institucion: string;
+}
+
 // Custom toolbar component
 const CustomToolbar = () => (
   <div id="toolbar" className="flex flex-wrap items-center gap-1 p-2 bg-[#1a1f2e] border-b border-white/10 sticky top-0 z-10">
@@ -63,22 +69,28 @@ const Editor: React.FC = () => {
     destinatario_cargo: '',
     destinatario_institucion: ''
   });
+  const [firmante, setFirmante] = useState<FirmanteHistory>({
+    firmante_nombre: 'Mtr. Jose Rene Hernandez Jiménez',
+    firmante_cargo: 'Administrador',
+    firmante_institucion: 'Region Sanitaria Deptal. De Cortes'
+  });
   const [history, setHistory] = useState<DestinatarioHistory[]>([]);
+  const [firmanteHistory, setFirmanteHistory] = useState<FirmanteHistory[]>([]);
   const [showHistory, setShowHistory] = useState<string | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchHistory = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch Destinatarios
+      const { data: destData, error: destError } = await supabase
         .from('rsdc_oficios')
         .select('destinatario_tipo, destinatario_nombre, destinatario_cargo, destinatario_institucion')
         .not('destinatario_nombre', 'eq', '')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (destError) throw destError;
 
-      // Filter unique history entries
-      const unique = data.reduce((acc: DestinatarioHistory[], curr) => {
+      const uniqueDest = destData.reduce((acc: DestinatarioHistory[], curr) => {
         const exists = acc.find(h => 
           h.destinatario_nombre.toLowerCase() === curr.destinatario_nombre.toLowerCase() &&
           h.destinatario_tipo === curr.destinatario_tipo
@@ -87,7 +99,26 @@ const Editor: React.FC = () => {
         return acc;
       }, []);
 
-      setHistory(unique);
+      setHistory(uniqueDest);
+
+      // Fetch Firmantes
+      const { data: firmData, error: firmError } = await supabase
+        .from('rsdc_oficios')
+        .select('firmante_nombre, firmante_cargo, firmante_institucion')
+        .not('firmante_nombre', 'eq', '')
+        .order('created_at', { ascending: false });
+
+      if (firmError) throw firmError;
+
+      const uniqueFirm = firmData.reduce((acc: FirmanteHistory[], curr) => {
+        const exists = acc.find(h => 
+          h.firmante_nombre.toLowerCase() === curr.firmante_nombre.toLowerCase()
+        );
+        if (!exists) acc.push(curr);
+        return acc;
+      }, []);
+
+      setFirmanteHistory(uniqueFirm);
     } catch (err) {
       console.error('Error fetching history:', err);
     }
@@ -116,6 +147,11 @@ const Editor: React.FC = () => {
         destinatario_cargo: data.destinatario_cargo || '',
         destinatario_institucion: data.destinatario_institucion || ''
       });
+      setFirmante({
+        firmante_nombre: data.firmante_nombre || 'Mtr. Jose Rene Hernandez Jiménez',
+        firmante_cargo: data.firmante_cargo || 'Administrador',
+        firmante_institucion: data.firmante_institucion || 'Region Sanitaria Deptal. De Cortes'
+      });
       fetchHistory();
     } catch (err) {
       console.error('Error fetching oficio:', err);
@@ -136,10 +172,18 @@ const Editor: React.FC = () => {
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const saveContent = useCallback(async (newContent: string, margin?: number, dest?: DestinatarioHistory, hSpacing?: number, gSpacing?: number) => {
+  const saveContent = useCallback(async (
+    newContent: string, 
+    margin?: number, 
+    dest?: DestinatarioHistory, 
+    hSpacing?: number, 
+    gSpacing?: number,
+    firm?: FirmanteHistory
+  ) => {
     if (!id) return;
     setSaving(true);
     const d = dest || destinatario;
+    const f = firm || firmante;
     try {
       const { error } = await supabase
         .from('rsdc_oficios')
@@ -152,7 +196,10 @@ const Editor: React.FC = () => {
           destinatario_tipo: d.destinatario_tipo,
           destinatario_nombre: d.destinatario_nombre,
           destinatario_cargo: d.destinatario_cargo,
-          destinatario_institucion: d.destinatario_institucion
+          destinatario_institucion: d.destinatario_institucion,
+          firmante_nombre: f.firmante_nombre,
+          firmante_cargo: f.firmante_cargo,
+          firmante_institucion: f.firmante_institucion
         })
         .eq('id', id);
 
@@ -162,14 +209,14 @@ const Editor: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  }, [id, customDate, topMargin, destinatario]);
+  }, [id, customDate, topMargin, headerSpacing, greetingSpacing, destinatario, firmante]);
 
   const handleContentChange = (value: string) => {
     setContent(value);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveContent(value);
-    }, 2000); // Auto-save after 2 seconds of inactivity
+    }, 2000);\ // Auto-save after 2 seconds of inactivity
   };
 
   const handleDateChange = (newDate: string) => {
@@ -214,12 +261,30 @@ const Editor: React.FC = () => {
     }, 1500);
   };
 
+  const handleFirmChange = (field: keyof FirmanteHistory, value: string) => {
+    const updated = { ...firmante, [field]: value };
+    setFirmante(updated);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(content, topMargin, destinatario, headerSpacing, greetingSpacing, updated);
+    }, 1500);
+  };
+
   const selectFromHistory = (item: DestinatarioHistory) => {
     setDestinatario(item);
     setShowHistory(null);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveContent(content, topMargin, item);
+    }, 500);
+  };
+
+  const selectFirmFromHistory = (item: FirmanteHistory) => {
+    setFirmante(item);
+    setShowHistory(null);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(content, topMargin, destinatario, headerSpacing, greetingSpacing, item);
     }, 500);
   };
 
@@ -398,6 +463,61 @@ const Editor: React.FC = () => {
                   placeholder="Empiece a escribir su oficio aquí..."
                   className="quill-word-editor"
                 />
+
+                {/* Signature Section */}
+                <div className="mt-16 space-y-12">
+                  <div className="text-sm">Atentamente,</div>
+                  
+                  <div className="space-y-0.5">
+                    <div className="w-64 border-t border-black mb-2" />
+                    <div className="font-bold text-sm">
+                      <input
+                        type="text"
+                        value={firmante.firmante_nombre}
+                        onChange={(e) => handleFirmChange('firmante_nombre', e.target.value)}
+                        onFocus={() => setShowHistory('firmante_nombre')}
+                        className="bg-transparent border-none p-0 focus:ring-0 w-full cursor-text hover:bg-black/5 rounded transition-colors"
+                        placeholder="NOMBRE DEL FIRMANTE"
+                      />
+                      {showHistory === 'firmante_nombre' && firmanteHistory.length > 0 && (
+                        <div className="absolute left-0 mt-1 w-64 bg-white shadow-xl border border-black/10 rounded-xl z-[100] py-2 max-h-60 overflow-y-auto">
+                          {firmanteHistory.map((h, i) => (
+                            <button
+                              key={i}
+                              onClick={() => selectFirmFromHistory(h)}
+                              className="w-full text-left px-4 py-2 hover:bg-black/5 flex flex-col"
+                            >
+                              <span className="font-bold text-xs">{h.firmante_nombre}</span>
+                              <span className="text-[10px] opacity-50">{h.firmante_cargo}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-sm">
+                      <input
+                        type="text"
+                        value={firmante.firmante_cargo}
+                        onChange={(e) => handleFirmChange('firmante_cargo', e.target.value)}
+                        className="bg-transparent border-none p-0 focus:ring-0 w-full cursor-text hover:bg-black/5 rounded transition-colors"
+                        placeholder="CARGO"
+                      />
+                    </div>
+                    <div className="text-sm">
+                      <input
+                        type="text"
+                        value={firmante.firmante_institucion}
+                        onChange={(e) => handleFirmChange('firmante_institucion', e.target.value)}
+                        className="bg-transparent border-none p-0 focus:ring-0 w-full cursor-text hover:bg-black/5 rounded transition-colors"
+                        placeholder="INSTITUCION"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] font-bold text-black/60 pt-8">
+                    CC.ARCHIVO
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -555,6 +675,69 @@ const Editor: React.FC = () => {
                     type="text" 
                     value={destinatario.destinatario_institucion}
                     onChange={(e) => handleDestChange('destinatario_institucion', e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h4 className="text-xs font-bold text-primary uppercase tracking-[0.2em] flex items-center gap-2">
+              <User size={14} /> Firmante
+            </h4>
+            
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="space-y-1 relative">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Nombre del Firmante</label>
+                  <input 
+                    type="text" 
+                    value={firmante.firmante_nombre}
+                    onChange={(e) => handleFirmChange('firmante_nombre', e.target.value)}
+                    onFocus={(e) => {
+                      e.stopPropagation();
+                      setShowHistory('firmante_panel');
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
+                    placeholder="Escriba para buscar..."
+                  />
+                  {showHistory === 'firmante_panel' && firmanteHistory.length > 0 && (
+                    <div className="absolute left-0 top-full mt-1 w-full bg-[#1a1f2e] shadow-2xl border border-white/10 rounded-xl z-[100] py-2 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+                      {firmanteHistory.map((h, i) => (
+                        <button
+                          key={i}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selectFirmFromHistory(h);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-white/5 flex flex-col transition-colors border-b border-white/5 last:border-none"
+                        >
+                          <span className="font-bold text-xs text-white">{h.firmante_nombre}</span>
+                          <span className="text-[10px] text-white/40">{h.firmante_cargo}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Cargo</label>
+                  <input 
+                    type="text" 
+                    value={firmante.firmante_cargo}
+                    onChange={(e) => handleFirmChange('firmante_cargo', e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Institución / Lugar</label>
+                  <input 
+                    type="text" 
+                    value={firmante.firmante_institucion}
+                    onChange={(e) => handleFirmChange('firmante_institucion', e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
                   />
                 </div>
