@@ -7,7 +7,6 @@ import { supabase } from '../lib/supabase';
 
 interface DestinatarioHistory {
   destinatario_tipo: string;
-  destinatario_titulo: string;
   destinatario_nombre: string;
   destinatario_cargo: string;
   destinatario_institucion: string;
@@ -58,7 +57,6 @@ const Editor: React.FC = () => {
   const [topMargin, setTopMargin] = useState(0);
   const [destinatario, setDestinatario] = useState<DestinatarioHistory>({
     destinatario_tipo: 'persona',
-    destinatario_titulo: 'LIC.',
     destinatario_nombre: '',
     destinatario_cargo: '',
     destinatario_institucion: ''
@@ -71,7 +69,7 @@ const Editor: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('rsdc_oficios')
-        .select('destinatario_tipo, destinatario_titulo, destinatario_nombre, destinatario_cargo, destinatario_institucion')
+        .select('destinatario_tipo, destinatario_nombre, destinatario_cargo, destinatario_institucion')
         .not('destinatario_nombre', 'eq', '')
         .order('created_at', { ascending: false });
 
@@ -110,7 +108,6 @@ const Editor: React.FC = () => {
       setTopMargin(data.margen_superior || 0);
       setDestinatario({
         destinatario_tipo: data.destinatario_tipo || 'persona',
-        destinatario_titulo: data.destinatario_titulo || (data.destinatario_tipo === 'empresa' ? 'SEÑORES' : 'LIC.'),
         destinatario_nombre: data.destinatario_nombre || '',
         destinatario_cargo: data.destinatario_cargo || '',
         destinatario_institucion: data.destinatario_institucion || ''
@@ -147,7 +144,6 @@ const Editor: React.FC = () => {
           fecha_creacion: customDate,
           margen_superior: margin !== undefined ? margin : topMargin,
           destinatario_tipo: d.destinatario_tipo,
-          destinatario_titulo: d.destinatario_titulo,
           destinatario_nombre: d.destinatario_nombre,
           destinatario_cargo: d.destinatario_cargo,
           destinatario_institucion: d.destinatario_institucion
@@ -189,11 +185,6 @@ const Editor: React.FC = () => {
   const handleDestChange = (field: keyof DestinatarioHistory, value: string) => {
     const updated = { ...destinatario, [field]: value };
     
-    // Auto-update title if type changes
-    if (field === 'destinatario_tipo') {
-      updated.destinatario_titulo = value === 'empresa' ? 'SEÑORES' : 'LIC.';
-    }
-
     setDestinatario(updated);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
@@ -314,15 +305,9 @@ const Editor: React.FC = () => {
                 {/* Destinatario Section */}
                 <div className="mb-12 space-y-0.5 relative group/dest">
                   <div className="flex flex-col uppercase font-bold text-sm">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={destinatario.destinatario_titulo}
-                        onChange={(e) => handleDestChange('destinatario_titulo', e.target.value)}
-                        className="bg-transparent border-none p-0 focus:ring-0 w-full cursor-text hover:bg-black/5 rounded transition-colors"
-                        placeholder={destinatario.destinatario_tipo === 'empresa' ? 'SEÑORES' : 'LIC.'}
-                      />
-                    </div>
+                    {destinatario.destinatario_tipo === 'empresa' && (
+                      <div className="mt-1">SEÑORES</div>
+                    )}
                     <div className="relative">
                       <input
                         type="text"
@@ -487,17 +472,6 @@ const Editor: React.FC = () => {
                       ))}
                     </div>
                   )}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Título</label>
-                  <input 
-                    type="text" 
-                    value={destinatario.destinatario_titulo}
-                    onChange={(e) => handleDestChange('destinatario_titulo', e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm"
-                    placeholder="LIC., DRA., etc."
-                  />
                 </div>
 
                 {destinatario.destinatario_tipo === 'persona' && (
