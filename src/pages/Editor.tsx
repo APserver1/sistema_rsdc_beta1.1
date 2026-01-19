@@ -63,6 +63,7 @@ const Editor: React.FC = () => {
   const [topMargin, setTopMargin] = useState(0);
   const [headerSpacing, setHeaderSpacing] = useState(2);
   const [greetingSpacing, setGreetingSpacing] = useState(2);
+  const [signatureSpacing, setSignatureSpacing] = useState(4);
   const [destinatario, setDestinatario] = useState<DestinatarioHistory>({
     destinatario_tipo: 'persona',
     destinatario_nombre: '',
@@ -141,6 +142,7 @@ const Editor: React.FC = () => {
       setTopMargin(data.margen_superior || 0);
       setHeaderSpacing(data.espaciado_cabecera_destinatario ?? 2);
       setGreetingSpacing(data.espaciado_destinatario_saludo ?? 2);
+      setSignatureSpacing(data.espaciado_firma ?? 4);
       setDestinatario({
         destinatario_tipo: data.destinatario_tipo || 'persona',
         destinatario_nombre: data.destinatario_nombre || '',
@@ -178,7 +180,8 @@ const Editor: React.FC = () => {
     dest?: DestinatarioHistory, 
     hSpacing?: number, 
     gSpacing?: number,
-    firm?: FirmanteHistory
+    firm?: FirmanteHistory,
+    sSpacing?: number
   ) => {
     if (!id) return;
     setSaving(true);
@@ -193,6 +196,7 @@ const Editor: React.FC = () => {
           margen_superior: margin !== undefined ? margin : topMargin,
           espaciado_cabecera_destinatario: hSpacing !== undefined ? hSpacing : headerSpacing,
           espaciado_destinatario_saludo: gSpacing !== undefined ? gSpacing : greetingSpacing,
+          espaciado_firma: sSpacing !== undefined ? sSpacing : signatureSpacing,
           destinatario_tipo: d.destinatario_tipo,
           destinatario_nombre: d.destinatario_nombre,
           destinatario_cargo: d.destinatario_cargo,
@@ -248,6 +252,14 @@ const Editor: React.FC = () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveContent(content, topMargin, destinatario, headerSpacing, newSpacing);
+    }, 1000);
+  };
+
+  const handleSignatureSpacingChange = (newSpacing: number) => {
+    setSignatureSpacing(newSpacing);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(content, topMargin, destinatario, headerSpacing, greetingSpacing, firmante, newSpacing);
     }, 1000);
   };
 
@@ -366,7 +378,7 @@ const Editor: React.FC = () => {
           
           <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center bg-[#161b22] scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
             {/* The "Page" */}
-            <div className="w-[816px] min-h-[1056px] bg-white shadow-2xl p-[80px] text-black font-['Arial'] relative mb-12">
+            <div className="w-[816px] min-h-[1056px] bg-white shadow-2xl pt-[80px] px-[80px] pb-[180px] text-black font-['Arial'] relative mb-12">
               {/* Membrete Background */}
               <div 
                 className="absolute inset-0 z-0 pointer-events-none opacity-50"
@@ -465,7 +477,10 @@ const Editor: React.FC = () => {
                 />
 
                 {/* Signature Section */}
-                <div className="mt-16 space-y-12">
+                <div 
+                  className="space-y-12"
+                  style={{ marginTop: `${signatureSpacing * 24}px` }}
+                >
                   <div className="text-sm">Atentamente,</div>
                   
                   <div className="space-y-0.5">
@@ -596,6 +611,21 @@ const Editor: React.FC = () => {
                   max="10" 
                   value={greetingSpacing}
                   onChange={(e) => handleGreetingSpacingChange(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Espacio Firma</label>
+                  <span className="text-[10px] font-bold text-primary">{signatureSpacing} renglones</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="10" 
+                  value={signatureSpacing}
+                  onChange={(e) => handleSignatureSpacingChange(parseInt(e.target.value))}
                   className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
               </div>
