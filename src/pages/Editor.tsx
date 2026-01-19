@@ -55,6 +55,8 @@ const Editor: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [customDate, setCustomDate] = useState('');
   const [topMargin, setTopMargin] = useState(0);
+  const [headerSpacing, setHeaderSpacing] = useState(2);
+  const [greetingSpacing, setGreetingSpacing] = useState(2);
   const [destinatario, setDestinatario] = useState<DestinatarioHistory>({
     destinatario_tipo: 'persona',
     destinatario_nombre: '',
@@ -106,6 +108,8 @@ const Editor: React.FC = () => {
       setContent(data.contenido_editor || '');
       setCustomDate(data.fecha_creacion.split('T')[0]);
       setTopMargin(data.margen_superior || 0);
+      setHeaderSpacing(data.espaciado_cabecera_destinatario ?? 2);
+      setGreetingSpacing(data.espaciado_destinatario_saludo ?? 2);
       setDestinatario({
         destinatario_tipo: data.destinatario_tipo || 'persona',
         destinatario_nombre: data.destinatario_nombre || '',
@@ -132,7 +136,7 @@ const Editor: React.FC = () => {
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const saveContent = useCallback(async (newContent: string, margin?: number, dest?: DestinatarioHistory) => {
+  const saveContent = useCallback(async (newContent: string, margin?: number, dest?: DestinatarioHistory, hSpacing?: number, gSpacing?: number) => {
     if (!id) return;
     setSaving(true);
     const d = dest || destinatario;
@@ -143,6 +147,8 @@ const Editor: React.FC = () => {
           contenido_editor: newContent,
           fecha_creacion: customDate,
           margen_superior: margin !== undefined ? margin : topMargin,
+          espaciado_cabecera_destinatario: hSpacing !== undefined ? hSpacing : headerSpacing,
+          espaciado_destinatario_saludo: gSpacing !== undefined ? gSpacing : greetingSpacing,
           destinatario_tipo: d.destinatario_tipo,
           destinatario_nombre: d.destinatario_nombre,
           destinatario_cargo: d.destinatario_cargo,
@@ -179,6 +185,22 @@ const Editor: React.FC = () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveContent(content, newMargin);
+    }, 1000);
+  };
+
+  const handleHeaderSpacingChange = (newSpacing: number) => {
+    setHeaderSpacing(newSpacing);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(content, topMargin, destinatario, newSpacing);
+    }, 1000);
+  };
+
+  const handleGreetingSpacingChange = (newSpacing: number) => {
+    setGreetingSpacing(newSpacing);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(content, topMargin, destinatario, headerSpacing, newSpacing);
     }, 1000);
   };
 
@@ -295,7 +317,7 @@ const Editor: React.FC = () => {
               <div className="relative z-10">
                 {/* Oficio Header */}
                 <div 
-                  className="flex justify-between mb-12 text-sm font-bold pb-4"
+                  className="flex justify-between text-sm font-bold pb-4"
                   style={{ marginTop: `${topMargin * 24}px` }}
                 >
                   <span>Oficio No. {oficio?.numero_oficio}/ADMON/RSDC No.5</span>
@@ -303,7 +325,10 @@ const Editor: React.FC = () => {
                 </div>
 
                 {/* Destinatario Section */}
-                <div className="mb-12 space-y-0.5 relative group/dest">
+                <div 
+                  className="space-y-0.5 relative group/dest"
+                  style={{ marginTop: `${headerSpacing * 24}px` }}
+                >
                   <div className="flex flex-col uppercase font-bold text-sm">
                     {destinatario.destinatario_tipo === 'empresa' && (
                       <div className="mt-1">SEÑORES</div>
@@ -354,6 +379,14 @@ const Editor: React.FC = () => {
                     </div>
                     <div className="mt-1">PRESENTE</div>
                   </div>
+                </div>
+
+                {/* Saludo Section */}
+                <div 
+                  className="font-bold text-sm mb-8"
+                  style={{ marginTop: `${greetingSpacing * 24}px` }}
+                >
+                  Estimado {destinatario.destinatario_nombre.split(' ')[0] || '________'},
                 </div>
 
                 <ReactQuill
@@ -413,6 +446,36 @@ const Editor: React.FC = () => {
                   max="20" 
                   value={topMargin}
                   onChange={(e) => handleMarginChange(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Espacio Cabecera → Dest.</label>
+                  <span className="text-[10px] font-bold text-primary">{headerSpacing} renglones</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="10" 
+                  value={headerSpacing}
+                  onChange={(e) => handleHeaderSpacingChange(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Espacio Dest. → Saludo</label>
+                  <span className="text-[10px] font-bold text-primary">{greetingSpacing} renglones</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="10" 
+                  value={greetingSpacing}
+                  onChange={(e) => handleGreetingSpacingChange(parseInt(e.target.value))}
                   className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
               </div>
