@@ -773,21 +773,21 @@ const Direccion: React.FC = () => {
           >
             {/* Header */}
             <div 
-              className="flex items-center justify-between p-4 bg-black/40 border-b border-white/10"
+              className="absolute top-0 left-0 right-0 z-[310] flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent"
               onClick={(e) => e.stopPropagation()}
             >
               <button 
                 onClick={() => setViewingAttachment(null)}
-                className="flex items-center gap-2 text-white/80 hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-white/10"
+                className="flex items-center gap-2 text-white hover:text-primary transition-colors px-4 py-2 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-sm border border-white/10 shadow-lg"
               >
                 <ArrowLeft size={24} />
-                <span className="font-bold">Volver</span>
+                <span className="font-bold hidden sm:inline">Volver</span>
               </button>
               <div className="flex gap-2">
                 <a 
                   href={viewingAttachment} 
                   download
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/80 hover:text-white"
+                  className="p-3 bg-black/40 hover:bg-black/60 backdrop-blur-sm border border-white/10 rounded-full transition-colors text-white hover:text-primary shadow-lg"
                   title="Descargar"
                 >
                   <Upload className="rotate-180" size={24} />
