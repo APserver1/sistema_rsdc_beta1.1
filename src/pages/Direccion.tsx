@@ -4,7 +4,7 @@ import {
   ClipboardList, Clock, CheckCircle2, AlertCircle, 
   Plus, X, Hash, User, Calendar as CalendarIcon, 
   ChevronRight, Loader2, Paperclip, Upload,
-  Camera, RefreshCw
+  Camera, RefreshCw, ArrowLeft
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -44,6 +44,7 @@ const Direccion: React.FC = () => {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDocuments();
@@ -379,16 +380,16 @@ const Direccion: React.FC = () => {
                         
                         {/* Attachment Logic */}
                         {doc.archivo_adjunto ? (
-                          <a 
-                            href={doc.archivo_adjunto} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
+                          <button 
                             className="flex items-center gap-1 text-primary hover:underline cursor-pointer hover:text-primary/80 transition-colors"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingAttachment(doc.archivo_adjunto!);
+                            }}
                           >
                             <Paperclip size={14} />
                             <span>Ver adjunto</span>
-                          </a>
+                          </button>
                         ) : (
                           <label 
                             className="flex items-center gap-1 text-white/20 hover:text-white/60 cursor-pointer transition-colors"
@@ -757,6 +758,71 @@ const Direccion: React.FC = () => {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Attachment Viewer Modal */}
+      <AnimatePresence>
+        {viewingAttachment && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 bg-black/40 border-b border-white/10">
+              <button 
+                onClick={() => setViewingAttachment(null)}
+                className="flex items-center gap-2 text-white/80 hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-white/10"
+              >
+                <ArrowLeft size={24} />
+                <span className="font-bold">Volver</span>
+              </button>
+              <div className="flex gap-2">
+                <a 
+                  href={viewingAttachment} 
+                  download
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/80 hover:text-white"
+                  title="Descargar"
+                >
+                  <Upload className="rotate-180" size={24} />
+                </a>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center">
+              {viewingAttachment.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                <img 
+                  src={viewingAttachment} 
+                  alt="Adjunto" 
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                />
+              ) : viewingAttachment.match(/\.pdf$/i) ? (
+                <iframe 
+                  src={viewingAttachment} 
+                  className="w-full h-full rounded-lg shadow-2xl bg-white"
+                  title="Visor de PDF"
+                />
+              ) : (
+                <div className="text-center space-y-4">
+                  <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto">
+                    <Paperclip size={40} className="text-white/40" />
+                  </div>
+                  <p className="text-xl text-white font-bold">Vista previa no disponible</p>
+                  <p className="text-white/40">Este tipo de archivo no se puede previsualizar.</p>
+                  <a 
+                    href={viewingAttachment} 
+                    download
+                    className="inline-block px-6 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/80 transition-colors"
+                  >
+                    Descargar Archivo
+                  </a>
+                </div>
+              )}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
