@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardList, Clock, CheckCircle2, AlertCircle, 
   Plus, X, Hash, User, Calendar as CalendarIcon, 
-  ChevronRight, Loader2, Paperclip, FileText, Upload
+  ChevronRight, Loader2, Paperclip, Upload
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
