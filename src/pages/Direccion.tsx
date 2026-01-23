@@ -4,7 +4,7 @@ import {
   ClipboardList, Clock, CheckCircle2, AlertCircle, 
   Plus, X, Hash, User, Calendar as CalendarIcon, 
   ChevronRight, Loader2, Paperclip, Upload,
-  Eye, Camera, RefreshCw
+  Camera, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
