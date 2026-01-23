@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardList, Clock, CheckCircle2, AlertCircle, 
   Plus, X, Hash, User, Calendar as CalendarIcon, 
-  ChevronRight, Loader2
+  ChevronRight, Loader2, Paperclip, FileText, Upload
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -15,6 +15,7 @@ interface Documento {
   fecha_creacion: string;
   estado: 'pending' | 'approved' | 'review';
   created_at: string;
+  archivo_adjunto?: string;
 }
 
 const Direccion: React.FC = () => {
@@ -32,9 +33,11 @@ const Direccion: React.FC = () => {
     numero_documento: '',
     quien_recibio: '',
     fecha_creacion: new Date().toISOString().split('T')[0],
-    estado: 'pending' as const
+    estado: 'pending' as const,
+    archivo_adjunto: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -67,11 +70,62 @@ const Direccion: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setDocuments(data || []);
+      
+      // Custom sorting: pending -> review -> approved
+      const statusOrder = { pending: 0, review: 1, approved: 2 };
+      const sortedData = (data || []).sort((a: Documento, b: Documento) => {
+        const statusDiff = statusOrder[a.estado] - statusOrder[b.estado];
+        if (statusDiff !== 0) return statusDiff;
+        // Secondary sort by date desc
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      setDocuments(sortedData);
     } catch (err) {
       console.error('Error fetching documents:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, docId?: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('direccion_documentos')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('direccion_documentos')
+        .getPublicUrl(filePath);
+
+      if (docId) {
+        // Update existing document
+        const { error: updateError } = await supabase
+          .from('rsdc_direccion_documentos')
+          .update({ archivo_adjunto: publicUrl })
+          .eq('id', docId);
+
+        if (updateError) throw updateError;
+        fetchDocuments();
+      } else {
+        // Set for new document
+        setNewDoc(prev => ({ ...prev, archivo_adjunto: publicUrl }));
+      }
+    } catch (err) {
+      console.error('Error uploading file:', err);
+      alert('Error al subir el archivo');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -97,7 +151,8 @@ const Direccion: React.FC = () => {
         numero_documento: '',
         quien_recibio: '',
         fecha_creacion: new Date().toISOString().split('T')[0],
-        estado: 'pending'
+        estado: 'pending',
+        archivo_adjunto: ''
       });
       fetchDocuments();
       fetchPreviousRecipients();
@@ -229,6 +284,35 @@ const Direccion: React.FC = () => {
                         <span className="flex items-center gap-1"><Hash size={14} /> {doc.numero_documento}</span>
                         <span className="flex items-center gap-1"><User size={14} /> {doc.quien_recibio}</span>
                         <span className="flex items-center gap-1"><CalendarIcon size={14} /> {new Date(doc.fecha_creacion).toLocaleDateString()}</span>
+                        
+                        {/* Attachment Logic */}
+                        {doc.archivo_adjunto ? (
+                          <a 
+                            href={doc.archivo_adjunto} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-primary hover:underline cursor-pointer hover:text-primary/80 transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Paperclip size={14} />
+                            <span>Ver adjunto</span>
+                          </a>
+                        ) : (
+                          <label 
+                            className="flex items-center gap-1 text-white/20 hover:text-white/60 cursor-pointer transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
+                            <span>Adjuntar</span>
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              onChange={(e) => handleFileUpload(e, doc.id)}
+                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                              disabled={isUploading}
+                            />
+                          </label>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -466,6 +550,37 @@ const Direccion: React.FC = () => {
                           </AnimatePresence>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-white/40 uppercase tracking-widest">Archivo Adjunto (Opcional)</label>
+                      <div className="flex items-center gap-4">
+                        <label className={`cursor-pointer glass-button bg-white/5 border border-white/10 hover:bg-white/10 px-4 py-3 rounded-xl flex items-center gap-2 transition-all ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                          {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                          <span className="text-sm">{isUploading ? 'Subiendo...' : 'Seleccionar Archivo'}</span>
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            onChange={(e) => handleFileUpload(e)}
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            disabled={isUploading}
+                          />
+                        </label>
+                        {newDoc.archivo_adjunto && (
+                          <div className="flex items-center gap-2 text-green-400 text-sm animate-in fade-in slide-in-from-left-2">
+                            <CheckCircle2 size={16} />
+                            <span>Archivo adjuntado</span>
+                            <button 
+                              type="button"
+                              onClick={() => setNewDoc(prev => ({ ...prev, archivo_adjunto: '' }))}
+                              className="ml-2 text-white/40 hover:text-white transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/30">Formatos permitidos: PDF, Word, Imágenes</p>
                     </div>
                   </div>
 
