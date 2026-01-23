@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardList, Clock, CheckCircle2, AlertCircle, 
   Plus, X, Hash, User, Calendar as CalendarIcon, 
-  ChevronRight, Loader2, Paperclip, Upload
+  ChevronRight, Loader2, Paperclip, Upload,
+  Eye, Camera, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -38,6 +39,11 @@ const Direccion: React.FC = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchDocuments();
@@ -129,31 +135,117 @@ const Direccion: React.FC = () => {
     }
   };
 
+  const resetForm = () => {
+    setNewDoc({
+      titulo: '',
+      numero_documento: '',
+      quien_recibio: '',
+      fecha_creacion: new Date().toISOString().split('T')[0],
+      estado: 'pending',
+      archivo_adjunto: ''
+    });
+  };
+
+  const startCamera = async () => {
+    try {
+      setShowCamera(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error('Error accessing camera:', err);
+      alert('No se pudo acceder a la cámara. Por favor, verifique los permisos.');
+      setShowCamera(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setShowCamera(false);
+  };
+
+  const takePhoto = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        setCapturedImage(dataUrl);
+        stopCamera();
+        
+        // Convert base64 to File object
+        fetch(dataUrl)
+          .then(res => res.blob())
+          .then(blob => {
+            const file = new File([blob], `foto_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            setSelectedFile(file);
+          });
+      }
+    }
+  };
+
+  const retakePhoto = () => {
+    setCapturedImage(null);
+    setSelectedFile(null);
+    startCamera();
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    resetForm();
+    stopCamera();
+    setCapturedImage(null);
+    setSelectedFile(null);
+  };
+
   const handleAddDocument = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newDoc.titulo || !newDoc.numero_documento || !newDoc.quien_recibio) return;
+
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user logged in');
 
+      let attachmentUrl = '';
+
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('direccion_documentos')
+          .upload(filePath, selectedFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('direccion_documentos')
+          .getPublicUrl(filePath);
+
+        attachmentUrl = publicUrl;
+      }
+
       const { error } = await supabase
         .from('rsdc_direccion_documentos')
         .insert([{
           ...newDoc,
-          user_id: user.id
+          user_id: user.id,
+          archivo_adjunto: attachmentUrl
         }]);
 
       if (error) throw error;
       
-      setIsModalOpen(false);
-      setNewDoc({
-        titulo: '',
-        numero_documento: '',
-        quien_recibio: '',
-        fecha_creacion: new Date().toISOString().split('T')[0],
-        estado: 'pending',
-        archivo_adjunto: ''
-      });
+      handleCloseModal();
       fetchDocuments();
       fetchPreviousRecipients();
     } catch (err) {
@@ -552,35 +644,92 @@ const Direccion: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-bold text-white/40 uppercase tracking-widest">Archivo Adjunto (Opcional)</label>
-                      <div className="flex items-center gap-4">
-                        <label className={`cursor-pointer glass-button bg-white/5 border border-white/10 hover:bg-white/10 px-4 py-3 rounded-xl flex items-center gap-2 transition-all ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                          {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
-                          <span className="text-sm">{isUploading ? 'Subiendo...' : 'Seleccionar Archivo'}</span>
-                          <input 
-                            type="file" 
-                            className="hidden" 
-                            onChange={(e) => handleFileUpload(e)}
-                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                            disabled={isUploading}
-                          />
-                        </label>
-                        {newDoc.archivo_adjunto && (
-                          <div className="flex items-center gap-2 text-green-400 text-sm animate-in fade-in slide-in-from-left-2">
-                            <CheckCircle2 size={16} />
-                            <span>Archivo adjuntado</span>
-                            <button 
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Archivo Adjunto (Opcional)</label>
+                      
+                      {showCamera ? (
+                        <div className="relative rounded-xl overflow-hidden bg-black aspect-video mb-2">
+                          <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+                            <button
                               type="button"
-                              onClick={() => setNewDoc(prev => ({ ...prev, archivo_adjunto: '' }))}
-                              className="ml-2 text-white/40 hover:text-white transition-colors"
+                              onClick={takePhoto}
+                              className="w-12 h-12 rounded-full bg-white border-4 border-white/20 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+                            />
+                            <button
+                              type="button"
+                              onClick={stopCamera}
+                              className="w-12 h-12 rounded-full bg-red-500/80 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
                             >
-                              <X size={14} />
+                              <X size={24} />
                             </button>
                           </div>
-                        )}
-                      </div>
-                      <p className="text-xs text-white/30">Formatos permitidos: PDF, Word, Imágenes</p>
+                        </div>
+                      ) : capturedImage ? (
+                        <div className="relative rounded-xl overflow-hidden bg-black/20 border border-white/10 aspect-video mb-2">
+                          <img src={capturedImage} alt="Captura" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-4 opacity-0 hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={retakePhoto}
+                              className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm font-bold flex items-center gap-2 backdrop-blur-sm"
+                            >
+                              <RefreshCw size={16} /> Repetir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCapturedImage(null);
+                                setSelectedFile(null);
+                              }}
+                              className="px-4 py-2 bg-red-500/80 hover:bg-red-500 rounded-lg text-white text-sm font-bold flex items-center gap-2 backdrop-blur-sm"
+                            >
+                              <X size={16} /> Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex-1 py-3 px-4 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2 text-sm"
+                          >
+                            {selectedFile ? (
+                              <span className="truncate max-w-[150px] text-white">{selectedFile.name}</span>
+                            ) : (
+                              <>
+                                <Upload size={18} />
+                                <span>Seleccionar Archivo</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={startCamera}
+                            className="py-3 px-4 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                            title="Tomar foto"
+                          >
+                            <Camera size={20} />
+                          </button>
+                        </div>
+                      )}
+                      
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setSelectedFile(e.target.files[0]);
+                            setCapturedImage(null);
+                          }
+                        }}
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      />
+                      <p className="text-[10px] text-white/30 pl-1">
+                        Formatos permitidos: PDF, Word, Imágenes
+                      </p>
                     </div>
                   </div>
 
