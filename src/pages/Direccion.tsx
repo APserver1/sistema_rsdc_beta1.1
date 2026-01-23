@@ -769,9 +769,13 @@ const Direccion: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex flex-col"
+            onClick={() => setViewingAttachment(null)}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 bg-black/40 border-b border-white/10">
+            <div 
+              className="flex items-center justify-between p-4 bg-black/40 border-b border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button 
                 onClick={() => setViewingAttachment(null)}
                 className="flex items-center gap-2 text-white/80 hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-white/10"
@@ -792,35 +796,40 @@ const Direccion: React.FC = () => {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-auto p-4 flex items-center justify-center">
-              {viewingAttachment.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                <img 
-                  src={viewingAttachment} 
-                  alt="Adjunto" 
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                />
-              ) : viewingAttachment.match(/\.pdf$/i) ? (
-                <iframe 
-                  src={viewingAttachment} 
-                  className="w-full h-full rounded-lg shadow-2xl bg-white"
-                  title="Visor de PDF"
-                />
-              ) : (
-                <div className="text-center space-y-4">
-                  <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto">
-                    <Paperclip size={40} className="text-white/40" />
+            <div 
+              className="flex-1 overflow-auto p-4 flex items-center justify-center"
+              onClick={() => setViewingAttachment(null)}
+            >
+              <div onClick={(e) => e.stopPropagation()} className="relative max-w-full max-h-full">
+                {viewingAttachment.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                  <img 
+                    src={viewingAttachment} 
+                    alt="Adjunto" 
+                    className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+                  />
+                ) : viewingAttachment.match(/\.pdf$/i) ? (
+                  <iframe 
+                    src={viewingAttachment} 
+                    className="w-[90vw] h-[85vh] rounded-lg shadow-2xl bg-white"
+                    title="Visor de PDF"
+                  />
+                ) : (
+                  <div className="text-center space-y-4">
+                    <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto">
+                      <Paperclip size={40} className="text-white/40" />
+                    </div>
+                    <p className="text-xl text-white font-bold">Vista previa no disponible</p>
+                    <p className="text-white/40">Este tipo de archivo no se puede previsualizar.</p>
+                    <a 
+                      href={viewingAttachment} 
+                      download
+                      className="inline-block px-6 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/80 transition-colors"
+                    >
+                      Descargar Archivo
+                    </a>
                   </div>
-                  <p className="text-xl text-white font-bold">Vista previa no disponible</p>
-                  <p className="text-white/40">Este tipo de archivo no se puede previsualizar.</p>
-                  <a 
-                    href={viewingAttachment} 
-                    download
-                    className="inline-block px-6 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/80 transition-colors"
-                  >
-                    Descargar Archivo
-                  </a>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </motion.div>
         )}
