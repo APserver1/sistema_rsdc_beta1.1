@@ -36,8 +36,14 @@ const Registro: React.FC = () => {
       setTimeout(() => {
         navigate('/login');
       }, 3000);
-    } catch (err: any) {
-      setError(err.message || 'Ocurrió un error al registrarse');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err && 'message' in err && typeof (err as { message?: unknown }).message === 'string'
+            ? (err as { message: string }).message
+            : null;
+      setError(message || 'Ocurrió un error al registrarse');
     } finally {
       setLoading(false);
     }

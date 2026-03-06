@@ -51,7 +51,7 @@ const Oficios: React.FC = () => {
   const detailsFileInputRef = useRef<HTMLInputElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
+  const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
 
   const clearCloseTimer = () => {
     if (closeTimerRef.current) {
@@ -63,13 +63,19 @@ const Oficios: React.FC = () => {
   const fetchOficios = useCallback(async () => {
     try {
       setLoading(true);
+      console.log('Fetching oficios for year:', selectedYear);
       const { data, error } = await supabase
         .from('rsdc_oficios')
         .select('*')
         .eq('anio', selectedYear)
         .order('numero_oficio', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('Oficios fetched:', data?.length || 0, 'rows');
       setOficios(data || []);
       
       // Calculate next number

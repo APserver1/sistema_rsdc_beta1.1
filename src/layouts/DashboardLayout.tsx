@@ -3,11 +3,13 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Menu, X, Home, FileText, ClipboardList, 
-  Car, Settings, ShieldCheck, LogOut 
+  Car, Settings, ShieldCheck, LogOut, Bot as BotIcon, Calendar as CalendarIcon
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useScheduler } from '../lib/scheduler';
 
 const DashboardLayout: React.FC = () => {
+  useScheduler();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [userName, setUserName] = useState<string>('');
@@ -48,7 +50,9 @@ const DashboardLayout: React.FC = () => {
     { path: '/', icon: <Home size={20} />, label: 'Home' },
     { path: '/oficios', icon: <FileText size={20} />, label: 'Números de Oficio' },
     { path: '/direccion', icon: <ClipboardList size={20} />, label: 'Documentos en Dirección' },
+    { path: '/calendar', icon: <CalendarIcon size={20} />, label: 'Calendario' },
     { path: '/vehiculos', icon: <Car size={20} />, label: 'Registro de Vehículos' },
+    { path: '/bot', icon: <BotIcon size={20} />, label: 'Asistente IA' },
     { path: '/ajustes', icon: <Settings size={20} />, label: 'Ajustes' },
     { path: '/terminos', icon: <ShieldCheck size={20} />, label: 'Términos y Condiciones' },
   ];
@@ -65,7 +69,7 @@ const DashboardLayout: React.FC = () => {
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/10 rounded-full blur-[120px] pointer-events-none" />
 
       {/* Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 h-16 glass-card !rounded-none border-t-0 border-x-0 flex items-center justify-between px-6">
+      <nav className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0b1320] border-b border-white/10 flex items-center justify-between px-6 shadow-xl">
         <div className="flex items-center">
           <button 
             onClick={toggleSidebar}
@@ -219,8 +223,10 @@ const DashboardLayout: React.FC = () => {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="pt-24 pb-12 px-6 max-w-7xl mx-auto relative z-10">
-        <Outlet />
+      <main className="fixed top-16 left-0 right-0 bottom-0 overflow-y-auto relative z-10">
+        <div className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-6 pb-12 min-h-full">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

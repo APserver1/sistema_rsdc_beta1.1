@@ -67,3 +67,51 @@
     linear-gradient(90deg, rgba(0, 242, 255, 0.05) 1px, transparent 1px);
   background-size: 50px 50px;
 }
+ 
+.word-editor .ql-container.ql-snow {
+  border: none;
+  height: 100%;
+  overflow: hidden;
+}
+.word-editor .ql-editor {
+  height: 100%;
+  min-height: 100%;
+  padding: 0;
+  color: #000;
+  overflow: hidden;
+}
+
+/* Toolbar contrast improvements */
+#doc-toolbar {
+  background: #0f1422 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+}
+#doc-toolbar .ql-toolbar,
+#doc-toolbar .ql-snow {
+  color: #fff;
+}
+#doc-toolbar .ql-picker-label,
+#doc-toolbar .ql-picker-item {
+  color: #fff !important;
+}
+#doc-toolbar .ql-snow .ql-stroke {
+  stroke: #fff !important;
+}
+#doc-toolbar .ql-snow .ql-fill,
+#doc-toolbar .ql-snow .ql-stroke.ql-fill {
+  fill: #fff !important;
+}
+#doc-toolbar select,
+#doc-toolbar button {
+  color: #fff !important;
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+}
+#doc-toolbar button:hover,
+#doc-toolbar select:hover {
+  background: rgba(255,255,255,0.16) !important;
+}
+#doc-toolbar .ql-picker-options {
+  background: #121826 !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+}

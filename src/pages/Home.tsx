@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FileText, ClipboardList, Car, ArrowRight } from 'lucide-react';
+import { FileText, ClipboardList, Car, ArrowRight, Bot as BotIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Home: React.FC = () => {
@@ -34,6 +34,14 @@ const Home: React.FC = () => {
       link: '/vehiculos',
       color: 'from-green-500/20 to-emerald-500/20',
       borderColor: 'border-emerald-500/30'
+    },
+    {
+      title: 'Asistente IA',
+      description: 'IA de asistencia avanzada con memoria persistente para tu trabajo.',
+      icon: <BotIcon size={32} />,
+      link: '/bot',
+      color: 'from-primary/20 to-secondary/20',
+      borderColor: 'border-primary/30'
     }
   ];
 

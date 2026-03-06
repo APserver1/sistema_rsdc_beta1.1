@@ -10,6 +10,8 @@ import Terminos from './pages/Terminos';
 import Login from './pages/Login';
 import Registro from './pages/Registro';
 import Editor from './pages/Editor';
+import BotPage from './pages/Bot';
+import CalendarPage from './pages/Calendar';
 
 function App() {
   return (
@@ -23,7 +25,9 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/oficios" element={<Oficios />} />
             <Route path="/direccion" element={<Direccion />} />
+            <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/vehiculos" element={<Vehiculos />} />
+            <Route path="/bot" element={<BotPage />} />
             <Route path="/ajustes" element={<Ajustes />} />
             <Route path="/terminos" element={<Terminos />} />
           </Route>

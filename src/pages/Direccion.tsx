@@ -12,9 +12,9 @@ interface Documento {
   id: string;
   titulo: string;
   numero_documento: string;
-  quien_recibio: string;
+  quien_recibio: 'Libni' | 'Sharon';
   fecha_creacion: string;
-  estado: 'pending' | 'approved' | 'review';
+  estado: 'Pendiente de Firma' | 'En Revision' | 'Aprovado';
   created_at: string;
   archivo_adjunto?: string;
 }
@@ -27,19 +27,22 @@ const Direccion: React.FC = () => {
   const [previousRecipients, setPreviousRecipients] = useState<string[]>([]);
   const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false);
   const [isStateDropdownOpen, setIsStateDropdownOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ show: boolean; x: number; y: number; docId: string | null }>({ show: false, x: 0, y: 0, docId: null });
+  const [editingId, setEditingId] = useState<string | null>(null);
   
   // Form state
   const [newDoc, setNewDoc] = useState({
     titulo: '',
     numero_documento: '',
-    quien_recibio: '',
+    quien_recibio: 'Libni' as 'Libni' | 'Sharon',
     fecha_creacion: new Date().toISOString().split('T')[0],
-    estado: 'pending' as const,
+    estado: 'Pendiente de Firma' as const,
     archivo_adjunto: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9' | '1:1'>('4:3');
   const [showCamera, setShowCamera] = useState(false);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -49,19 +52,23 @@ const Direccion: React.FC = () => {
   useEffect(() => {
     fetchDocuments();
     fetchPreviousRecipients();
+
+    const handleClickOutside = () => setContextMenu({ ...contextMenu, show: false });
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
   const fetchPreviousRecipients = async () => {
     try {
       const { data, error } = await supabase
-        .from('rsdc_direccion_documentos')
+        .from('documentos_en_direccion')
         .select('quien_recibio')
         .order('quien_recibio');
 
       if (error) throw error;
       
       // Get unique names
-      const uniqueNames = Array.from(new Set(data?.map(d => d.quien_recibio) || []));
+      const uniqueNames = Array.from(new Set(data?.map(d => d.quien_recibio) || [])) as string[];
       setPreviousRecipients(uniqueNames);
     } catch (err) {
       console.error('Error fetching recipients:', err);
@@ -72,14 +79,14 @@ const Direccion: React.FC = () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('rsdc_direccion_documentos')
+        .from('documentos_en_direccion')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       
       // Custom sorting: pending -> review -> approved
-      const statusOrder = { pending: 0, review: 1, approved: 2 };
+      const statusOrder = { 'Pendiente de Firma': 0, 'En Revision': 1, 'Aprovado': 2 };
       const sortedData = (data || []).sort((a: Documento, b: Documento) => {
         const statusDiff = statusOrder[a.estado] - statusOrder[b.estado];
         if (statusDiff !== 0) return statusDiff;
@@ -118,7 +125,7 @@ const Direccion: React.FC = () => {
       if (docId) {
         // Update existing document
         const { error: updateError } = await supabase
-          .from('rsdc_direccion_documentos')
+          .from('documentos_en_direccion')
           .update({ archivo_adjunto: publicUrl })
           .eq('id', docId);
 
@@ -137,12 +144,13 @@ const Direccion: React.FC = () => {
   };
 
   const resetForm = () => {
+    setEditingId(null);
     setNewDoc({
       titulo: '',
       numero_documento: '',
-      quien_recibio: '',
+      quien_recibio: 'Libni',
       fecha_creacion: new Date().toISOString().split('T')[0],
-      estado: 'pending',
+      estado: 'Pendiente de Firma',
       archivo_adjunto: ''
     });
   };
@@ -150,7 +158,13 @@ const Direccion: React.FC = () => {
   const startCamera = async () => {
     try {
       setShowCamera(true);
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const constraints = {
+        video: {
+          facingMode: 'environment',
+          aspectRatio: aspectRatio === '4:3' ? 4/3 : aspectRatio === '16:9' ? 16/9 : 1
+        }
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
@@ -160,6 +174,12 @@ const Direccion: React.FC = () => {
       setShowCamera(false);
     }
   };
+
+  useEffect(() => {
+    if (showCamera) {
+      startCamera();
+    }
+  }, [aspectRatio]);
 
   const stopCamera = () => {
     if (videoRef.current && videoRef.current.srcObject) {
@@ -207,6 +227,46 @@ const Direccion: React.FC = () => {
     setSelectedFile(null);
   };
 
+  const handleContextMenu = (e: React.MouseEvent, docId: string) => {
+    e.preventDefault();
+    setContextMenu({
+      show: true,
+      x: e.clientX,
+      y: e.clientY,
+      docId
+    });
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar esta actividad?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('documentos_en_direccion')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      fetchDocuments();
+    } catch (err) {
+      console.error('Error deleting document:', err);
+    }
+  };
+
+  const handleEdit = (doc: Documento) => {
+    setEditingId(doc.id);
+    setNewDoc({
+      titulo: doc.titulo,
+      numero_documento: doc.numero_documento,
+      quien_recibio: doc.quien_recibio,
+      fecha_creacion: doc.fecha_creacion.split('T')[0],
+      estado: doc.estado,
+      archivo_adjunto: doc.archivo_adjunto || ''
+    });
+    setIsModalOpen(true);
+    setContextMenu({ ...contextMenu, show: false });
+  };
+
   const handleAddDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDoc.titulo || !newDoc.numero_documento || !newDoc.quien_recibio) return;
@@ -216,7 +276,7 @@ const Direccion: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user logged in');
 
-      let attachmentUrl = '';
+      let attachmentUrl = newDoc.archivo_adjunto || '';
 
       if (selectedFile) {
         const fileExt = selectedFile.name.split('.').pop();
@@ -236,30 +296,42 @@ const Direccion: React.FC = () => {
         attachmentUrl = publicUrl;
       }
 
-      const { error } = await supabase
-        .from('rsdc_direccion_documentos')
-        .insert([{
-          ...newDoc,
-          user_id: user.id,
-          archivo_adjunto: attachmentUrl
-        }]);
+      if (editingId) {
+        const { error } = await supabase
+          .from('documentos_en_direccion')
+          .update({
+            ...newDoc,
+            archivo_adjunto: attachmentUrl
+          })
+          .eq('id', editingId);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('documentos_en_direccion')
+          .insert([{
+            ...newDoc,
+            user_id: user.id,
+            archivo_adjunto: attachmentUrl
+          }]);
+
+        if (error) throw error;
+      }
       
       handleCloseModal();
       fetchDocuments();
       fetchPreviousRecipients();
     } catch (err) {
-      console.error('Error adding document:', err);
+      console.error('Error saving document:', err);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleUpdateStatus = async (id: string, newStatus: 'pending' | 'approved' | 'review') => {
+  const handleUpdateStatus = async (id: string, newStatus: 'Pendiente de Firma' | 'En Revision' | 'Aprovado') => {
     try {
       const { error } = await supabase
-        .from('rsdc_direccion_documentos')
+        .from('documentos_en_direccion')
         .update({ estado: newStatus })
         .eq('id', id);
 
@@ -272,17 +344,17 @@ const Direccion: React.FC = () => {
     }
   };
 
-  const getStatusInfo = (status: string) => {
+  const getStatusInfo = (status: 'Pendiente de Firma' | 'En Revision' | 'Aprovado') => {
     switch (status) {
-      case 'approved': 
+      case 'Aprovado': 
         return { 
           icon: <CheckCircle2 className="text-green-400" size={20} />, 
-          label: 'Aprobado',
+          label: 'Aprovado',
           color: 'text-green-400',
           bg: 'bg-green-500/10',
           border: 'border-green-500/20'
         };
-      case 'pending': 
+      case 'Pendiente de Firma': 
         return { 
           icon: <Clock className="text-yellow-400" size={20} />, 
           label: 'Pendiente de Firma',
@@ -290,10 +362,10 @@ const Direccion: React.FC = () => {
           bg: 'bg-yellow-500/10',
           border: 'border-yellow-500/20'
         };
-      case 'review': 
+      case 'En Revision': 
         return { 
           icon: <AlertCircle className="text-blue-400" size={20} />, 
-          label: 'En Revisión',
+          label: 'En Revision',
           color: 'text-blue-400',
           bg: 'bg-blue-500/10',
           border: 'border-blue-500/20'
@@ -303,13 +375,13 @@ const Direccion: React.FC = () => {
   };
 
   const stats = {
-    pending: documents.filter(d => d.estado === 'pending').length,
-    review: documents.filter(d => d.estado === 'review').length,
-    approved: documents.filter(d => d.estado === 'approved').length,
+    pending: documents.filter(d => d.estado === 'Pendiente de Firma').length,
+    review: documents.filter(d => d.estado === 'En Revision').length,
+    approved: documents.filter(d => d.estado === 'Aprovado').length,
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 md:space-y-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -365,9 +437,10 @@ const Direccion: React.FC = () => {
                 <motion.div 
                   key={doc.id}
                   whileHover={{ x: 5 }}
-                  className="glass-card p-5 flex items-center justify-between group relative"
+                  onContextMenu={(e) => handleContextMenu(e, doc.id)}
+                  className="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group relative"
                 >
-                  <div className="flex items-center gap-4 flex-1">
+                  <div className="flex items-center gap-4 flex-1 w-full">
                     <div className="p-3 bg-white/5 rounded-xl group-hover:bg-white/10 transition-colors hidden sm:block">
                       <ClipboardList className="text-white/40" />
                     </div>
@@ -376,7 +449,12 @@ const Direccion: React.FC = () => {
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/40">
                         <span className="flex items-center gap-1"><Hash size={14} /> {doc.numero_documento}</span>
                         <span className="flex items-center gap-1"><User size={14} /> {doc.quien_recibio}</span>
-                        <span className="flex items-center gap-1"><CalendarIcon size={14} /> {new Date(doc.fecha_creacion).toLocaleDateString()}</span>
+                        <span className="flex items-center gap-1">
+                          <CalendarIcon size={14} /> 
+                          {doc.fecha_creacion 
+                            ? new Date(doc.fecha_creacion + 'T00:00:00').toLocaleDateString('es-ES') 
+                            : new Date(doc.created_at).toLocaleDateString('es-ES')}
+                        </span>
                         
                         {/* Attachment Logic */}
                         {doc.archivo_adjunto ? (
@@ -410,13 +488,13 @@ const Direccion: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="relative">
+                  <div className="relative w-full sm:w-auto">
                     <button 
                       onClick={() => setStatusPanelId(statusPanelId === doc.id ? null : doc.id)}
-                      className={`flex items-center gap-2 px-4 py-2 ${info?.bg} ${info?.border} border rounded-xl transition-all hover:scale-105 active:scale-95`}
+                      className={`w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2 px-4 py-3 sm:py-2 ${info?.bg} ${info?.border} border rounded-xl transition-all hover:scale-105 active:scale-95`}
                     >
                       {info?.icon}
-                      <span className={`text-sm font-bold ${info?.color} hidden xs:block`}>{info?.label}</span>
+                      <span className={`text-sm font-bold ${info?.color}`}>{info?.label}</span>
                     </button>
 
                     {/* Quick Status Change Panel */}
@@ -434,29 +512,29 @@ const Direccion: React.FC = () => {
                             initial={{ opacity: 0, scale: 0.9, y: 10 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                            className="absolute right-0 bottom-full mb-2 w-56 glass-card !p-2 z-[101] shadow-2xl border border-white/10"
+                            className="absolute right-0 left-0 sm:left-auto bottom-full mb-2 w-full sm:w-56 glass-card !p-2 z-[101] shadow-2xl border border-white/10"
                           >
                             <p className="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] px-3 py-2">Cambiar Estado</p>
                             <div className="space-y-1">
-                              {[
-                                { id: 'pending', ...getStatusInfo('pending') },
-                                { id: 'review', ...getStatusInfo('review') },
-                                { id: 'approved', ...getStatusInfo('approved') }
-                              ].map((status) => (
-                                <button
-                                  key={status.id}
-                                  onClick={() => handleUpdateStatus(doc.id, status.id as any)}
-                                  className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors group/item ${doc.estado === status.id ? 'bg-white/5' : ''}`}
-                                >
-                                  <div className="flex items-center gap-3">
-                                    {status.icon}
-                                    <span className={`text-sm font-medium ${doc.estado === status.id ? 'text-white' : 'text-white/60'}`}>
-                                      {status.label}
-                                    </span>
-                                  </div>
-                                  {doc.estado === status.id && <div className="w-1.5 h-1.5 rounded-full bg-primary shadow-neon-cyan" />}
-                                </button>
-                              ))}
+                              {(['Pendiente de Firma', 'En Revision', 'Aprovado'] as const).map((statusId) => {
+                                const statusInfo = getStatusInfo(statusId);
+                                if (!statusInfo) return null;
+                                return (
+                                  <button
+                                    key={statusId}
+                                    onClick={() => handleUpdateStatus(doc.id, statusId)}
+                                    className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors group/item ${doc.estado === statusId ? 'bg-white/5' : ''}`}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      {statusInfo.icon}
+                                      <span className={`text-sm font-medium ${doc.estado === statusId ? 'text-white' : 'text-white/60'}`}>
+                                        {statusInfo.label}
+                                      </span>
+                                    </div>
+                                    {doc.estado === statusId && <div className="w-1.5 h-1.5 rounded-full bg-primary shadow-neon-cyan" />}
+                                  </button>
+                                );
+                              })}
                             </div>
                           </motion.div>
                         </>
@@ -469,6 +547,30 @@ const Direccion: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu.show && (
+        <div 
+          className="fixed bg-[#0a0f1a] border border-white/10 rounded-xl shadow-2xl py-2 z-[9999] min-w-[160px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button
+            onClick={() => handleEdit(documents.find(d => d.id === contextMenu.docId)!)}
+            className="w-full text-left px-4 py-2 hover:bg-white/5 text-sm font-medium flex items-center gap-2"
+          >
+            <ClipboardList size={16} /> Editar
+          </button>
+          <button
+            onClick={() => {
+              handleDelete(contextMenu.docId!);
+              setContextMenu({ ...contextMenu, show: false });
+            }}
+            className="w-full text-left px-4 py-2 hover:bg-red-500/10 text-red-400 text-sm font-medium flex items-center gap-2"
+          >
+            <X size={16} /> Eliminar
+          </button>
+        </div>
+      )}
 
       {/* Add Document Modal */}
       <AnimatePresence>
@@ -531,52 +633,15 @@ const Direccion: React.FC = () => {
                       </div>
                       <div className="space-y-2 relative">
                         <label className="text-sm font-bold text-white/40 uppercase tracking-widest">Recibido por</label>
-                        <div className="relative">
-                          <input
-                            required
-                            type="text"
-                            placeholder="Nombre del responsable"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-                            value={newDoc.quien_recibio}
-                            onChange={(e) => {
-                              setNewDoc({...newDoc, quien_recibio: e.target.value});
-                              setShowRecipientSuggestions(true);
-                            }}
-                            onFocus={() => setShowRecipientSuggestions(true)}
-                          />
-                          <AnimatePresence>
-                            {showRecipientSuggestions && previousRecipients.length > 0 && (
-                              <>
-                                <div 
-                                  className="fixed inset-0 z-[210]" 
-                                  onClick={() => setShowRecipientSuggestions(false)}
-                                />
-                                <motion.div
-                                  initial={{ opacity: 0, y: 5 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: 5 }}
-                                  className="absolute left-0 right-0 top-full mt-2 bg-[#0a0f1a] border border-white/10 rounded-xl overflow-hidden z-[211] shadow-2xl max-h-40 overflow-y-auto"
-                                >
-                                  {previousRecipients
-                                    .filter(name => name.toLowerCase().includes(newDoc.quien_recibio.toLowerCase()))
-                                    .map((name, idx) => (
-                                      <button
-                                        key={idx}
-                                        type="button"
-                                        className="w-full text-left px-4 py-2 hover:bg-white/5 transition-colors text-sm text-white/70 hover:text-white"
-                                        onClick={() => {
-                                          setNewDoc({...newDoc, quien_recibio: name});
-                                          setShowRecipientSuggestions(false);
-                                        }}
-                                      >
-                                        {name}
-                                      </button>
-                                    ))}
-                                </motion.div>
-                              </>
-                            )}
-                          </AnimatePresence>
-                        </div>
+                        <select
+                          required
+                          className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all [color-scheme:dark]"
+                          value={newDoc.quien_recibio}
+                          onChange={(e) => setNewDoc({...newDoc, quien_recibio: e.target.value as 'Libni' | 'Sharon'})}
+                        >
+                          <option value="Libni">Libni</option>
+                          <option value="Sharon">Sharon</option>
+                        </select>
                       </div>
                     </div>
 
@@ -619,24 +684,24 @@ const Direccion: React.FC = () => {
                                   exit={{ opacity: 0, scale: 0.95, y: 5 }}
                                   className="absolute left-0 right-0 top-full mt-2 bg-[#0a0f1a] border border-white/10 rounded-xl overflow-hidden z-[211] shadow-2xl"
                                 >
-                                  {[
-                                    { id: 'pending', ...getStatusInfo('pending') },
-                                    { id: 'review', ...getStatusInfo('review') },
-                                    { id: 'approved', ...getStatusInfo('approved') }
-                                  ].map((status) => (
-                                    <button
-                                      key={status.id}
-                                      type="button"
-                                      className={`w-full flex items-center gap-3 p-3 hover:bg-white/5 transition-colors ${newDoc.estado === status.id ? 'bg-white/5' : ''}`}
-                                      onClick={() => {
-                                        setNewDoc({...newDoc, estado: status.id as any});
-                                        setIsStateDropdownOpen(false);
-                                      }}
-                                    >
-                                      {status.icon}
-                                      <span className="text-sm font-medium">{status.label}</span>
-                                    </button>
-                                  ))}
+                                  {(['Pendiente de Firma', 'En Revision', 'Aprovado'] as const).map((statusId) => {
+                                    const statusInfo = getStatusInfo(statusId);
+                                    if (!statusInfo) return null;
+                                    return (
+                                      <button
+                                        key={statusId}
+                                        type="button"
+                                        className={`w-full flex items-center gap-3 p-3 hover:bg-white/5 transition-colors ${newDoc.estado === statusId ? 'bg-white/5' : ''}`}
+                                        onClick={() => {
+                                          setNewDoc({ ...newDoc, estado: statusId });
+                                          setIsStateDropdownOpen(false);
+                                        }}
+                                      >
+                                        {statusInfo.icon}
+                                        <span className="text-sm font-medium">{statusInfo.label}</span>
+                                      </button>
+                                    );
+                                  })}
                                 </motion.div>
                               </>
                             )}
@@ -649,21 +714,48 @@ const Direccion: React.FC = () => {
                       <label className="text-xs font-bold text-white/30 uppercase tracking-widest">Archivo Adjunto (Opcional)</label>
                       
                       {showCamera ? (
-                        <div className="relative rounded-xl overflow-hidden bg-black aspect-video mb-2">
-                          <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-                            <button
-                              type="button"
-                              onClick={takePhoto}
-                              className="w-12 h-12 rounded-full bg-white border-4 border-white/20 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-                            />
-                            <button
-                              type="button"
-                              onClick={stopCamera}
-                              className="w-12 h-12 rounded-full bg-red-500/80 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-                            >
-                              <X size={24} />
-                            </button>
+                        <div className="relative rounded-xl overflow-hidden bg-black mb-2 flex flex-col items-center">
+                          <div 
+                            className="relative overflow-hidden bg-black w-full"
+                            style={{ aspectRatio: aspectRatio.replace(':', '/') }}
+                          >
+                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                          </div>
+                          
+                          <div className="w-full bg-black/40 p-4 flex flex-col gap-4">
+                            {/* Aspect Ratio Controls */}
+                            <div className="flex justify-center gap-2">
+                              {(['4:3', '16:9', '1:1'] as const).map((ratio) => (
+                                <button
+                                  key={ratio}
+                                  type="button"
+                                  onClick={() => setAspectRatio(ratio)}
+                                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                                    aspectRatio === ratio 
+                                      ? 'bg-white text-black' 
+                                      : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                  }`}
+                                >
+                                  {ratio}
+                                </button>
+                              ))}
+                            </div>
+
+                            <div className="flex justify-center gap-8 items-center">
+                              <button
+                                type="button"
+                                onClick={stopCamera}
+                                className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-colors"
+                              >
+                                <X size={20} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={takePhoto}
+                                className="w-16 h-16 rounded-full bg-white border-4 border-white/20 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+                              />
+                              <div className="w-10" /> {/* Spacer for centering */}
+                            </div>
                           </div>
                         </div>
                       ) : capturedImage ? (
@@ -768,39 +860,29 @@ const Direccion: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex flex-col"
+            className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex flex-col"
             onClick={() => setViewingAttachment(null)}
           >
-            {/* Header */}
-            <div 
-              className="absolute top-0 left-0 right-0 z-[310] flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button 
-                onClick={() => setViewingAttachment(null)}
-                className="flex items-center gap-2 text-white hover:text-primary transition-colors px-4 py-2 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-sm border border-white/10 shadow-lg"
-              >
-                <ArrowLeft size={24} />
-                <span className="font-bold hidden sm:inline">Volver</span>
-              </button>
-              <div className="flex gap-2">
-                <a 
-                  href={viewingAttachment} 
-                  download
-                  className="p-3 bg-black/40 hover:bg-black/60 backdrop-blur-sm border border-white/10 rounded-full transition-colors text-white hover:text-primary shadow-lg"
-                  title="Descargar"
-                >
-                  <Upload className="rotate-180" size={24} />
-                </a>
-              </div>
-            </div>
-
             {/* Content */}
-            <div 
-              className="flex-1 overflow-auto p-4 flex items-center justify-center"
-              onClick={() => setViewingAttachment(null)}
-            >
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center">
               <div onClick={(e) => e.stopPropagation()} className="relative max-w-full max-h-full">
+                <button
+                  onClick={() => setViewingAttachment(null)}
+                  className="absolute top-3 left-3 z-20 flex items-center gap-2 text-white hover:text-primary transition-colors px-4 py-2 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-sm border border-white/10 shadow-lg"
+                  title="Volver"
+                >
+                  <ArrowLeft size={20} />
+                  <span className="font-bold hidden sm:inline">Volver</span>
+                </button>
+                <a
+                  href={viewingAttachment}
+                  download
+                  className="absolute top-3 right-3 z-20 p-3 bg-black/50 hover:bg-black/70 backdrop-blur-sm border border-white/10 rounded-full transition-colors text-white hover:text-primary shadow-lg"
+                  title="Descargar"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Upload className="rotate-180" size={20} />
+                </a>
                 {viewingAttachment.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                   <img 
                     src={viewingAttachment} 
@@ -810,8 +892,14 @@ const Direccion: React.FC = () => {
                 ) : viewingAttachment.match(/\.pdf$/i) ? (
                   <iframe 
                     src={viewingAttachment} 
-                    className="w-[90vw] h-[85vh] rounded-lg shadow-2xl bg-white"
+                    className="w-[90vw] h-[85vh] rounded-lg shadow-2xl bg-white border-none"
                     title="Visor de PDF"
+                  />
+                ) : viewingAttachment.match(/\.(doc|docx)$/i) ? (
+                  <iframe 
+                    src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(viewingAttachment)}`}
+                    className="w-[90vw] h-[85vh] rounded-lg shadow-2xl bg-white border-none"
+                    title="Visor de Word"
                   />
                 ) : (
                   <div className="text-center space-y-4">
