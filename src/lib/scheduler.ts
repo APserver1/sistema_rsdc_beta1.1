@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { aiService } from '../lib/ai-service';
 import { telegramService } from '../lib/ai-telegram-service';
 import { format } from 'date-fns';
 

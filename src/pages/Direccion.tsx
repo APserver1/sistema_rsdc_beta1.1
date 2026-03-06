@@ -24,19 +24,24 @@ const Direccion: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [statusPanelId, setStatusPanelId] = useState<string | null>(null);
-  const [previousRecipients, setPreviousRecipients] = useState<string[]>([]);
-  const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false);
   const [isStateDropdownOpen, setIsStateDropdownOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ show: boolean; x: number; y: number; docId: string | null }>({ show: false, x: 0, y: 0, docId: null });
   const [editingId, setEditingId] = useState<string | null>(null);
   
   // Form state
-  const [newDoc, setNewDoc] = useState({
+  const [newDoc, setNewDoc] = useState<{
+    titulo: string;
+    numero_documento: string;
+    quien_recibio: 'Libni' | 'Sharon';
+    fecha_creacion: string;
+    estado: 'Pendiente de Firma' | 'En Revision' | 'Aprovado';
+    archivo_adjunto: string;
+  }>({
     titulo: '',
     numero_documento: '',
-    quien_recibio: 'Libni' as 'Libni' | 'Sharon',
+    quien_recibio: 'Libni',
     fecha_creacion: new Date().toISOString().split('T')[0],
-    estado: 'Pendiente de Firma' as const,
+    estado: 'Pendiente de Firma',
     archivo_adjunto: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,29 +56,11 @@ const Direccion: React.FC = () => {
 
   useEffect(() => {
     fetchDocuments();
-    fetchPreviousRecipients();
 
     const handleClickOutside = () => setContextMenu({ ...contextMenu, show: false });
     window.addEventListener('click', handleClickOutside);
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
-
-  const fetchPreviousRecipients = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('documentos_en_direccion')
-        .select('quien_recibio')
-        .order('quien_recibio');
-
-      if (error) throw error;
-      
-      // Get unique names
-      const uniqueNames = Array.from(new Set(data?.map(d => d.quien_recibio) || [])) as string[];
-      setPreviousRecipients(uniqueNames);
-    } catch (err) {
-      console.error('Error fetching recipients:', err);
-    }
-  };
 
   const fetchDocuments = async () => {
     try {
@@ -320,7 +307,6 @@ const Direccion: React.FC = () => {
       
       handleCloseModal();
       fetchDocuments();
-      fetchPreviousRecipients();
     } catch (err) {
       console.error('Error saving document:', err);
     } finally {

@@ -355,14 +355,15 @@ export const aiService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('No user logged in');
 
-    return this.processMessage(user.id, userMessage, currentHistory, (newHistory) => {
-      return supabase
+    return await this.processMessage(user.id, userMessage, currentHistory, async (newHistory) => {
+      const { error } = await supabase
         .from('rsdc_ai_chat')
         .update({ 
           conversacion: newHistory,
           ultima_vez_usado: new Date().toISOString()
         })
         .eq('id', chatId);
+      if (error) throw error;
     });
   },
 
@@ -438,7 +439,11 @@ export const aiService = {
               role: 'system',
               content: `Resultado de la herramienta ${toolCall.tool}: ${toolResult}`
             };
-            const followUpMessages = [...messagesToSend, { role: 'assistant', content: finalContent }, toolMessage];
+            const followUpMessages: Message[] = [
+              ...messagesToSend, 
+              { role: 'assistant', content: finalContent } as Message, 
+              toolMessage
+            ];
             const secondResponse = await this.callOpenRouter(followUpMessages);
             finalContent = secondResponse.content;
             newMessages = [{ role: 'assistant', content: finalContent }];
@@ -454,9 +459,9 @@ export const aiService = {
     }
 
     // 4. Update History
-    const updatedHistory = [
+    const updatedHistory: Message[] = [
       ...currentHistory, 
-      { role: 'user', content: userMessage },
+      { role: 'user', content: userMessage } as Message,
       ...newMessages
     ];
     
