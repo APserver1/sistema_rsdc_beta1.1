@@ -75,7 +75,7 @@ const BotPage: React.FC = () => {
       .from('rsdc_telegram_users')
       .select('*')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
     
     setIsLinked(!!data);
   };

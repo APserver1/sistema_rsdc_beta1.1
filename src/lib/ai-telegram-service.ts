@@ -82,7 +82,7 @@ export const telegramService = {
       .from('rsdc_telegram_users')
       .select('user_id')
       .eq('telegram_chat_id', chatId)
-      .single();
+      .maybeSingle();
 
     if (!linkedUser) {
       if (text.startsWith('/start')) {
