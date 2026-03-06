@@ -331,7 +331,7 @@ export const aiService = {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${AI_CONFIG.apiKey}`,
-        'HTTP-Referer': 'http://localhost:5173',
+        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173',
         'X-Title': 'RSDC System',
         'Content-Type': 'application/json'
       },

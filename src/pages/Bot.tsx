@@ -57,8 +57,14 @@ const BotPage: React.FC = () => {
     checkTelegramStatus();
     
     // Start Telegram polling (Dev/Testing only - in production use webhooks)
-    telegramService.startPolling();
-    return () => telegramService.stopPolling();
+    if (import.meta.env.DEV) {
+      telegramService.startPolling();
+    }
+    return () => {
+      if (import.meta.env.DEV) {
+        telegramService.stopPolling();
+      }
+    };
   }, []);
 
   const checkTelegramStatus = async () => {
