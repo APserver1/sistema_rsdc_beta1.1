@@ -18,6 +18,22 @@ const MONTHS = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
+const formatDate = (dateString: string) => {
+  if (!dateString) return '';
+  const [year, month, day] = dateString.split('-');
+  return `${day}/${month}/${year}`;
+};
+
+const formatTime = (timeString: string) => {
+  if (!timeString) return '';
+  const [hourStr, minuteStr] = timeString.split(':');
+  let hour = parseInt(hourStr, 10);
+  const ampm = hour >= 12 ? 'pm' : 'am';
+  hour = hour % 12;
+  hour = hour ? hour : 12; // 0 becomes 12
+  return `${hour.toString().padStart(2, '0')}:${minuteStr} ${ampm}`;
+};
+
 const Vehiculos: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
@@ -32,6 +48,7 @@ const Vehiculos: React.FC = () => {
   // Suggestions
   const [nombresUsados, setNombresUsados] = useState<string[]>([]);
   const [personalUsado, setPersonalUsado] = useState<string[]>([]);
+  const [destinosUsados, setDestinosUsados] = useState<string[]>([]);
 
   useEffect(() => {
     fetchSuggestions();
@@ -45,16 +62,17 @@ const Vehiculos: React.FC = () => {
 
   const fetchSuggestions = async () => {
     try {
-      const { data: nombresData } = await supabase.from('control_de_vehiculos').select('nombre');
-      const { data: personalData } = await supabase.from('control_de_vehiculos').select('personal_que_acompana');
+      const { data } = await supabase.from('control_de_vehiculos').select('nombre, personal_que_acompana, destino');
       
-      if (nombresData) {
-        const uniqueNombres = Array.from(new Set(nombresData.map(r => r.nombre).filter(Boolean)));
+      if (data) {
+        const uniqueNombres = Array.from(new Set(data.map(r => r.nombre).filter(Boolean)));
         setNombresUsados(uniqueNombres);
-      }
-      if (personalData) {
-        const uniquePersonal = Array.from(new Set(personalData.map(r => r.personal_que_acompana).filter(Boolean)));
+
+        const uniquePersonal = Array.from(new Set(data.map(r => r.personal_que_acompana).filter(Boolean)));
         setPersonalUsado(uniquePersonal);
+
+        const uniqueDestinos = Array.from(new Set(data.map(r => r.destino).filter(Boolean)));
+        setDestinosUsados(uniqueDestinos);
       }
     } catch (e) {
       console.error("Error fetching suggestions:", e);
@@ -114,10 +132,14 @@ const Vehiculos: React.FC = () => {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, colIndex: number) => {
     const target = e.target as HTMLInputElement;
+    const isDateTime = target.type === 'date' || target.type === 'time';
+
     if (e.key === 'ArrowUp') {
+      if (isDateTime) return;
       e.preventDefault();
       document.getElementById(`cell-${rowIndex - 1}-${colIndex}`)?.focus();
     } else if (e.key === 'ArrowDown') {
+      if (isDateTime) return;
       e.preventDefault();
       document.getElementById(`cell-${rowIndex + 1}-${colIndex}`)?.focus();
     } else if (e.key === 'ArrowLeft') {
@@ -194,6 +216,9 @@ const Vehiculos: React.FC = () => {
       </datalist>
       <datalist id="personal-list">
         {personalUsado.map((p, idx) => <option key={idx} value={p} />)}
+      </datalist>
+      <datalist id="destinos-list">
+        {destinosUsados.map((d, idx) => <option key={idx} value={d} />)}
       </datalist>
 
       {/* Header */}
@@ -276,12 +301,12 @@ const Vehiculos: React.FC = () => {
                   ) : (
                     records.map((r, i) => (
                       <tr key={r.id || i} className="hover:bg-white/5 transition-colors">
-                        <td className="p-4 whitespace-nowrap">{r.fecha}</td>
-                        <td className="p-4 whitespace-nowrap">{r.hora?.slice(0,5)}</td>
+                        <td className="p-4 whitespace-nowrap">{formatDate(r.fecha)}</td>
+                        <td className="p-4 whitespace-nowrap">{formatTime(r.hora)}</td>
                         <td className="p-4">{r.nombre}</td>
                         <td className="p-4">{r.personal_que_acompana}</td>
                         <td className="p-4">{r.destino}</td>
-                        <td className="p-4 whitespace-nowrap">{r.hora_de_regreso ? r.hora_de_regreso.slice(0,5) : '-'}</td>
+                        <td className="p-4 whitespace-nowrap">{r.hora_de_regreso ? formatTime(r.hora_de_regreso) : '-'}</td>
                       </tr>
                     ))
                   )}
@@ -359,7 +384,7 @@ const Vehiculos: React.FC = () => {
                               value={record.fecha}
                               onChange={(e) => handleFieldChange(index, 'fecha', e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 0)}
-                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-400/50"
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-400/50 [&::-webkit-calendar-picker-indicator]:hidden"
                             />
                           </td>
                           <td className="py-2 px-2">
@@ -369,7 +394,7 @@ const Vehiculos: React.FC = () => {
                               value={record.hora}
                               onChange={(e) => handleFieldChange(index, 'hora', e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 1)}
-                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-400/50"
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-400/50 [&::-webkit-calendar-picker-indicator]:hidden"
                             />
                           </td>
                           <td className="py-2 px-2">
@@ -400,6 +425,7 @@ const Vehiculos: React.FC = () => {
                             <input
                               id={`cell-${index}-4`}
                               type="text"
+                              list="destinos-list"
                               value={record.destino}
                               onChange={(e) => handleFieldChange(index, 'destino', e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 4)}
@@ -414,7 +440,7 @@ const Vehiculos: React.FC = () => {
                               value={record.hora_de_regreso}
                               onChange={(e) => handleFieldChange(index, 'hora_de_regreso', e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 5)}
-                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-400/50"
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-400/50 [&::-webkit-calendar-picker-indicator]:hidden"
                             />
                           </td>
                         </tr>
