@@ -46,9 +46,11 @@ const Oficios: React.FC = () => {
     fecha_creacion: new Date().toISOString().split('T')[0],
   });
   const [uploading, setUploading] = useState(false);
+  const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const detailsFileInputRef = useRef<HTMLInputElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
@@ -145,6 +147,90 @@ const Oficios: React.FC = () => {
       alert('Error al guardar el oficio. Posiblemente el número ya existe para este año.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+      alert('Por favor seleccione un archivo Word (.docx).');
+      return;
+    }
+
+    clearCloseTimer();
+    setImporting(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user logged in');
+
+      // 1. Parse .docx to HTML and Raw Text
+      const mammoth = await import('mammoth');
+      const arrayBuffer = await file.arrayBuffer();
+      const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+      const htmlContent = htmlResult.value;
+      
+      const textResult = await mammoth.extractRawText({ arrayBuffer });
+      const rawText = textResult.value.trim();
+
+      // 2. Upload file to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${nextNumber}-${Math.random()}.${fileExt}`;
+      const filePath = `documents/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('oficios')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('oficios')
+        .getPublicUrl(filePath);
+
+      // 3. Create the Oficio record
+      const descripcionToUse = formData.descripcion || rawText || file.name.replace(/\.docx$/i, '');
+
+      const { data, error } = await supabase
+        .from('rsdc_oficios')
+        .insert([{
+          numero_oficio: nextNumber,
+          descripcion: descripcionToUse,
+          fecha_creacion: formData.fecha_creacion,
+          hecho_por: userName,
+          anio: selectedYear,
+          user_id: user.id,
+          contenido_editor: htmlContent,
+          file_url: publicUrl,
+          file_name: file.name
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      // 4. Update UI state
+      setFormData({ ...formData, descripcion: descripcionToUse });
+      setIsSaved(true);
+      setSavedOficioId(data.id);
+      setSavedOficioNumber(data.numero_oficio);
+      fetchOficios();
+
+      closeTimerRef.current = setTimeout(() => {
+        closeNewOficioModal();
+      }, 8000);
+
+    } catch (err) {
+      console.error('Error importing file:', err);
+      alert('Error al importar el archivo. Revise la consola para más detalles.');
+    } finally {
+      setImporting(false);
+      if (importFileInputRef.current) {
+        importFileInputRef.current.value = '';
+      }
     }
   };
 
@@ -441,7 +527,7 @@ const Oficios: React.FC = () => {
                     <div className="space-y-3">
                       <label className="text-xs font-bold text-white/40 uppercase tracking-[0.2em]">Descripción del Oficio</label>
                       <textarea
-                        required
+                        required={!importing && !isSaved}
                         disabled={isSaved}
                         placeholder="Escriba el asunto o destinatario del oficio..."
                         rows={3}
@@ -494,9 +580,26 @@ const Oficios: React.FC = () => {
                           >
                             Cancelar
                           </button>
+
+                          <input 
+                            type="file" 
+                            ref={importFileInputRef} 
+                            className="hidden" 
+                            accept=".docx"
+                            onChange={handleImportFile}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => importFileInputRef.current?.click()}
+                            disabled={isSaving || importing}
+                            className="flex-1 py-4 px-6 rounded-2xl bg-white/10 text-white border border-white/20 font-bold shadow-xl hover:bg-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
+                          >
+                            {importing ? <Loader2 className="animate-spin" size={20} /> : <><FileText size={20} /> Importar</>}
+                          </button>
+
                           <button
                             type="submit"
-                            disabled={isSaving}
+                            disabled={isSaving || importing}
                             className="flex-[2] py-4 px-6 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
                           >
                             {isSaving ? <Loader2 className="animate-spin" size={20} /> : <><Save size={20} /> Guardar Oficio</>}
