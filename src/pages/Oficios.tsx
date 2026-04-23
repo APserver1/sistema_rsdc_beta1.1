@@ -168,6 +168,7 @@ const Oficios: React.FC = () => {
       if (!user) throw new Error('No user logged in');
 
       // 1. Parse .docx to HTML and Raw Text
+      // @ts-ignore: Mammoth doesn't have official TS types available
       const mammoth = await import('mammoth');
       const arrayBuffer = await file.arrayBuffer();
       const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
